@@ -3,8 +3,19 @@ package it.polito.teaching.cv;
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+import org.opencv.core.Core;
+import org.opencv.core.Mat;
+import org.opencv.core.MatOfByte;
+import org.opencv.core.MatOfPoint;
+import org.opencv.core.Scalar;
+import org.opencv.core.Size;
+import org.opencv.imgcodecs.Imgcodecs;
+import org.opencv.imgproc.Imgproc;
+import org.opencv.videoio.VideoCapture;
 
 import javafx.application.Platform;
 import javafx.beans.property.ObjectProperty;
@@ -16,16 +27,6 @@ import javafx.scene.control.Slider;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 
-import org.opencv.core.Core;
-import org.opencv.core.Mat;
-import org.opencv.core.MatOfByte;
-import org.opencv.core.MatOfPoint;
-import org.opencv.core.Scalar;
-import org.opencv.core.Size;
-import org.opencv.highgui.Highgui;
-import org.opencv.highgui.VideoCapture;
-import org.opencv.imgproc.Imgproc;
-
 /**
  * The controller associated with the only view of our application. The
  * application logic is implemented here. It handles the button for
@@ -33,7 +34,8 @@ import org.opencv.imgproc.Imgproc;
  * controls and the image segmentation process.
  * 
  * @author <a href="mailto:luigi.derussis@polito.it">Luigi De Russis</a>
- * @since 2015-01-13
+ * @version 1.5 (2015-11-26)
+ * @since 1.0 (2015-01-13)
  * 
  */
 public class ObjRecognitionController
@@ -68,41 +70,26 @@ public class ObjRecognitionController
 	private Label hsvCurrentValues;
 	
 	// a timer for acquiring the video stream
-	private Timer timer;
+	private ScheduledExecutorService timer;
 	// the OpenCV object that performs the video capture
 	private VideoCapture capture = new VideoCapture();
 	// a flag to change the button behavior
 	private boolean cameraActive;
 	
 	// property for object binding
-	private ObjectProperty<Image> maskProp;
-	private ObjectProperty<Image> morphProp;
 	private ObjectProperty<String> hsvValuesProp;
-	
+		
 	/**
 	 * The action triggered by pushing the button on the GUI
 	 */
 	@FXML
 	private void startCamera()
 	{
-		// bind an image property with the original frame container
-		final ObjectProperty<Image> imageProp = new SimpleObjectProperty<>();
-		this.originalFrame.imageProperty().bind(imageProp);
-		
-		// bind an image property with the mask container
-		maskProp = new SimpleObjectProperty<>();
-		this.maskImage.imageProperty().bind(maskProp);
-		
-		// bind an image property with the container of the morph operators
-		// output
-		morphProp = new SimpleObjectProperty<>();
-		this.morphImage.imageProperty().bind(morphProp);
-		
 		// bind a text property with the string containing the current range of
 		// HSV values for object detection
 		hsvValuesProp = new SimpleObjectProperty<>();
 		this.hsvCurrentValues.textProperty().bind(hsvValuesProp);
-		
+				
 		// set a fixed width for all the image to show and preserve image ratio
 		this.imageViewProperties(this.originalFrame, 400);
 		this.imageViewProperties(this.maskImage, 200);
@@ -119,18 +106,18 @@ public class ObjRecognitionController
 				this.cameraActive = true;
 				
 				// grab a frame every 33 ms (30 frames/sec)
-				TimerTask frameGrabber = new TimerTask() {
+				Runnable frameGrabber = new Runnable() {
+					
 					@Override
 					public void run()
 					{
-						// update the image property => update the frame
-						// shown in the UI
-						Image frame = grabFrame();
-						onFXThread(imageProp, frame);
+						Image imageToShow = grabFrame();
+						originalFrame.setImage(imageToShow);
 					}
 				};
-				this.timer = new Timer();
-				this.timer.schedule(frameGrabber, 0, 33);
+				
+				this.timer = Executors.newSingleThreadScheduledExecutor();
+				this.timer.scheduleAtFixedRate(frameGrabber, 0, 33, TimeUnit.MILLISECONDS);
 				
 				// update the button content
 				this.cameraButton.setText("Stop Camera");
@@ -149,11 +136,17 @@ public class ObjRecognitionController
 			this.cameraButton.setText("Start Camera");
 			
 			// stop the timer
-			if (this.timer != null)
+			try
 			{
-				this.timer.cancel();
-				this.timer = null;
+				this.timer.shutdown();
+				this.timer.awaitTermination(33, TimeUnit.MILLISECONDS);
 			}
+			catch (InterruptedException e)
+			{
+				// log the exception
+				System.err.println("Exception in stopping the frame capture, trying to release the camera now... " + e);
+			}
+			
 			// release the camera
 			this.capture.release();
 		}
@@ -209,7 +202,7 @@ public class ObjRecognitionController
 					// threshold HSV image to select tennis balls
 					Core.inRange(hsvImage, minValues, maxValues, mask);
 					// show the partial output
-					this.onFXThread(maskProp, this.mat2Image(mask));
+					this.onFXThread(this.maskImage.imageProperty(), this.mat2Image(mask));
 					
 					// morphological operators
 					// dilate with large element, erode with small ones
@@ -223,7 +216,7 @@ public class ObjRecognitionController
 					Imgproc.dilate(mask, morphOutput, dilateElement);
 					
 					// show the partial output
-					this.onFXThread(this.morphProp, this.mat2Image(morphOutput));
+					this.onFXThread(this.morphImage.imageProperty(), this.mat2Image(morphOutput));
 					
 					// find the tennis ball(s) contours and show them
 					frame = this.findAndDrawBalls(morphOutput, frame);
@@ -307,7 +300,7 @@ public class ObjRecognitionController
 		// create a temporary buffer
 		MatOfByte buffer = new MatOfByte();
 		// encode the frame in the buffer, according to the PNG format
-		Highgui.imencode(".png", frame, buffer);
+		Imgcodecs.imencode(".png", frame, buffer);
 		// build and return an Image created from the image encoded in the
 		// buffer
 		return new Image(new ByteArrayInputStream(buffer.toArray()));

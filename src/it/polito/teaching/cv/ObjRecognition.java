@@ -8,7 +8,7 @@ import javafx.scene.Scene;
 import javafx.scene.layout.BorderPane;
 import javafx.fxml.FXMLLoader;
 
-public class Lab7 extends Application
+public class ObjRecognition extends Application
 {
 	/**
 	 * The main class for a JavaFX application. It creates and handles the main
@@ -19,7 +19,8 @@ public class Lab7 extends Application
 	 * framed with a blue line.
 	 * 
 	 * @author <a href="mailto:luigi.derussis@polito.it">Luigi De Russis</a>
-	 * @since 2015-01-13
+	 * @version 1.1 (2015-11-26)
+	 * @since 1.0 (2015-01-13)
 	 * 
 	 */
 	@Override
@@ -36,7 +37,7 @@ public class Lab7 extends Application
 			scene.getStylesheets().add(getClass().getResource("application.css").toExternalForm());
 			// create the stage with the given title and the previously created
 			// scene
-			primaryStage.setTitle("Lab7");
+			primaryStage.setTitle("Object Recognition");
 			primaryStage.setScene(scene);
 			// show the GUI
 			primaryStage.show();

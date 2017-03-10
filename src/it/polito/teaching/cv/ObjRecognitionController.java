@@ -136,19 +136,7 @@ public class ObjRecognitionController
 			this.cameraButton.setText("Start Camera");
 			
 			// stop the timer
-			try
-			{
-				this.timer.shutdown();
-				this.timer.awaitTermination(33, TimeUnit.MILLISECONDS);
-			}
-			catch (InterruptedException e)
-			{
-				// log the exception
-				System.err.println("Exception in stopping the frame capture, trying to release the camera now... " + e);
-			}
-			
-			// release the camera
-			this.capture.release();
+			this.stopAcquisition();
 		}
 	}
 	

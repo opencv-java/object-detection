@@ -3,7 +3,9 @@ package it.polito.teaching.cv;
 import org.opencv.core.Core;
 
 import javafx.application.Application;
+import javafx.event.EventHandler;
 import javafx.stage.Stage;
+import javafx.stage.WindowEvent;
 import javafx.scene.Scene;
 import javafx.scene.layout.BorderPane;
 import javafx.fxml.FXMLLoader;
@@ -19,7 +21,7 @@ public class ObjRecognition extends Application
 	 * framed with a blue line.
 	 * 
 	 * @author <a href="mailto:luigi.derussis@polito.it">Luigi De Russis</a>
-	 * @version 1.1 (2015-11-26)
+	 * @version 2.0 (2017-03-10)
 	 * @since 1.0 (2015-01-13)
 	 * 
 	 */
@@ -29,7 +31,9 @@ public class ObjRecognition extends Application
 		try
 		{
 			// load the FXML resource
-			BorderPane root = (BorderPane) FXMLLoader.load(getClass().getResource("ObjRecognition.fxml"));
+			FXMLLoader loader = new FXMLLoader(getClass().getResource("ObjRecognition.fxml"));
+			// store the root element so that the controllers can use it
+			BorderPane root = (BorderPane) loader.load();
 			// set a whitesmoke background
 			root.setStyle("-fx-background-color: whitesmoke;");
 			// create and style a scene
@@ -41,6 +45,15 @@ public class ObjRecognition extends Application
 			primaryStage.setScene(scene);
 			// show the GUI
 			primaryStage.show();
+			
+			// set the proper behavior on closing the application
+			ObjRecognitionController controller = loader.getController();
+			primaryStage.setOnCloseRequest((new EventHandler<WindowEvent>() {
+				public void handle(WindowEvent we)
+				{
+					controller.setClosed();
+				}
+			}));
 		}
 		catch (Exception e)
 		{

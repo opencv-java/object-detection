@@ -1,6 +1,5 @@
 package it.polito.teaching.cv;
 
-import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -9,15 +8,13 @@ import java.util.concurrent.TimeUnit;
 
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
-import org.opencv.core.MatOfByte;
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
-import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.videoio.VideoCapture;
 
-import javafx.application.Platform;
+import it.polito.elite.teaching.cv.utils.Utils;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.fxml.FXML;
@@ -34,7 +31,7 @@ import javafx.scene.image.ImageView;
  * controls and the image segmentation process.
  * 
  * @author <a href="mailto:luigi.derussis@polito.it">Luigi De Russis</a>
- * @version 1.5 (2015-11-26)
+ * @version 2.0 (2017-03-10)
  * @since 1.0 (2015-01-13)
  * 
  */
@@ -111,8 +108,11 @@ public class ObjRecognitionController
 					@Override
 					public void run()
 					{
-						Image imageToShow = grabFrame();
-						originalFrame.setImage(imageToShow);
+						// effectively grab and process a single frame
+						Mat frame = grabFrame();
+						// convert and show the frame
+						Image imageToShow = Utils.mat2Image(frame);
+						updateImageView(originalFrame, imageToShow);
 					}
 				};
 				
@@ -157,10 +157,8 @@ public class ObjRecognitionController
 	 * 
 	 * @return the {@link Image} to show
 	 */
-	private Image grabFrame()
+	private Mat grabFrame()
 	{
-		// init everything
-		Image imageToShow = null;
 		Mat frame = new Mat();
 		
 		// check if the capture is open
@@ -197,12 +195,12 @@ public class ObjRecognitionController
 					String valuesToPrint = "Hue range: " + minValues.val[0] + "-" + maxValues.val[0]
 							+ "\tSaturation range: " + minValues.val[1] + "-" + maxValues.val[1] + "\tValue range: "
 							+ minValues.val[2] + "-" + maxValues.val[2];
-					this.onFXThread(this.hsvValuesProp, valuesToPrint);
+					Utils.onFXThread(this.hsvValuesProp, valuesToPrint);
 					
 					// threshold HSV image to select tennis balls
 					Core.inRange(hsvImage, minValues, maxValues, mask);
 					// show the partial output
-					this.onFXThread(this.maskImage.imageProperty(), this.mat2Image(mask));
+					this.updateImageView(this.maskImage, Utils.mat2Image(mask));
 					
 					// morphological operators
 					// dilate with large element, erode with small ones
@@ -210,31 +208,29 @@ public class ObjRecognitionController
 					Mat erodeElement = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(12, 12));
 					
 					Imgproc.erode(mask, morphOutput, erodeElement);
-					Imgproc.erode(mask, morphOutput, erodeElement);
+					Imgproc.erode(morphOutput, morphOutput, erodeElement);
 					
-					Imgproc.dilate(mask, morphOutput, dilateElement);
-					Imgproc.dilate(mask, morphOutput, dilateElement);
+					Imgproc.dilate(morphOutput, morphOutput, dilateElement);
+					Imgproc.dilate(morphOutput, morphOutput, dilateElement);
 					
 					// show the partial output
-					this.onFXThread(this.morphImage.imageProperty(), this.mat2Image(morphOutput));
+					this.updateImageView(this.morphImage, Utils.mat2Image(morphOutput));
 					
 					// find the tennis ball(s) contours and show them
 					frame = this.findAndDrawBalls(morphOutput, frame);
-					
-					// convert the Mat object (OpenCV) to Image (JavaFX)
-					imageToShow = mat2Image(frame);
+
 				}
 				
 			}
 			catch (Exception e)
 			{
 				// log the (full) error
-				System.err.print("ERROR");
+				System.err.print("Exception during the image elaboration...");
 				e.printStackTrace();
 			}
 		}
 		
-		return imageToShow;
+		return frame;
 	}
 	
 	/**
@@ -288,43 +284,51 @@ public class ObjRecognitionController
 	}
 	
 	/**
-	 * Convert a {@link Mat} object (OpenCV) in the corresponding {@link Image}
-	 * for JavaFX
-	 * 
-	 * @param frame
-	 *            the {@link Mat} representing the current frame
-	 * @return the {@link Image} to show
+	 * Stop the acquisition from the camera and release all the resources
 	 */
-	private Image mat2Image(Mat frame)
+	private void stopAcquisition()
 	{
-		// create a temporary buffer
-		MatOfByte buffer = new MatOfByte();
-		// encode the frame in the buffer, according to the PNG format
-		Imgcodecs.imencode(".png", frame, buffer);
-		// build and return an Image created from the image encoded in the
-		// buffer
-		return new Image(new ByteArrayInputStream(buffer.toArray()));
+		if (this.timer!=null && !this.timer.isShutdown())
+		{
+			try
+			{
+				// stop the timer
+				this.timer.shutdown();
+				this.timer.awaitTermination(33, TimeUnit.MILLISECONDS);
+			}
+			catch (InterruptedException e)
+			{
+				// log any exception
+				System.err.println("Exception in stopping the frame capture, trying to release the camera now... " + e);
+			}
+		}
+		
+		if (this.capture.isOpened())
+		{
+			// release the camera
+			this.capture.release();
+		}
 	}
 	
 	/**
-	 * Generic method for putting element running on a non-JavaFX thread on the
-	 * JavaFX thread, to properly update the UI
+	 * Update the {@link ImageView} in the JavaFX main thread
 	 * 
-	 * @param property
-	 *            a {@link ObjectProperty}
-	 * @param value
-	 *            the value to set for the given {@link ObjectProperty}
+	 * @param view
+	 *            the {@link ImageView} to update
+	 * @param image
+	 *            the {@link Image} to show
 	 */
-	private <T> void onFXThread(final ObjectProperty<T> property, final T value)
+	private void updateImageView(ImageView view, Image image)
 	{
-		Platform.runLater(new Runnable() {
-			
-			@Override
-			public void run()
-			{
-				property.set(value);
-			}
-		});
+		Utils.onFXThread(view.imageProperty(), image);
+	}
+	
+	/**
+	 * On application close, stop the acquisition from the camera
+	 */
+	protected void setClosed()
+	{
+		this.stopAcquisition();
 	}
 	
 }

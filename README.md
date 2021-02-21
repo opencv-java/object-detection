@@ -1,5 +1,7 @@
 ## Object Recognition with OpenCV and JavaFX
 
+[![No Maintenance Intended](http://unmaintained.tech/badge.svg)](http://unmaintained.tech/)
+
 *Computer Vision course - [Politecnico di Torino](http://www.polito.it)*
 
 A project, made in Eclipse (Neon), for identify and track one or more tennis balls. It performs the detection of the tennis balls upon a webcam video stream by using the color range of the balls, erosion and dilation, and the `findContours` method. Some screenshots of the running project are available in the `screenshots` folder.
